@@ -4,26 +4,6 @@ library(stringi)
 library(shiny)
 library(shinycssloaders)
 
-
-all_words <- as.data.frame(read.csv("words (2).csv"))
-
-all_words <- all_words |>
-  rename(words = "X2")
-
-all_four <- all_words |>
-  filter(str_length(words) >= 4)
-
-all_four <- all_four |>
-  filter(grepl("[[:punct:]]", all_four$words) != "TRUE" &
-           grepl("[0-9]", all_four$words) != "TRUE")
-
-all_four$words <- tolower(all_four$words)
-
-bee_letters <- letters[c(-1, -5, -9, -15, -17, -21, -24, -26)]
-
-bee_vowels <- c("a", "e", "i", "o", "u")
-
-
 ui <- fluidPage(
   
   titlePanel("Welcome To The Spelling Bee!"),
@@ -61,8 +41,18 @@ ui <- fluidPage(
 
 server <- function(input, output, session) {
   
-  b_letters <- c(sample(bee_letters, 4, replace = FALSE), sample(bee_vowels, 3, replace = FALSE))
+  all_four <- as.data.frame(read.csv("words (2).csv")) |>
+    rename(words = "X2") |>
+    mutate(words = tolower(words)) |>
+    filter(grepl("[[:punct:]]", words) != TRUE &
+             grepl("[0-9]", words) != TRUE &
+             nchar(words) > 3)
   
+  bee_letters <- letters[c(-1, -5, -9, -15, -17, -21, -24, -26)]
+  
+  bee_vowels <- c("a", "e", "i", "o", "u")
+  
+  b_letters <- c(sample(bee_letters, 4, replace = FALSE), sample(bee_vowels, 3, replace = FALSE))
   
   output$choose <- renderText({
     "Here are the game letters:"
@@ -74,16 +64,24 @@ server <- function(input, output, session) {
   
   pattern <- paste0("^[",paste(b_letters, collapse = ""),"]+$")         
   
-  total_words <- all_four |>
-    filter(str_detect(words, b_letters[7]) &
-            str_detect(words, pattern))
-
+  total_fours <- all_four |>
+    filter(nchar(words) == 4 &
+           str_detect(words, b_letters[7]) &
+           str_detect(words, pattern))
   
-  total_points <- sum(str_length(total_words$words))
+  total_others <- all_four |>
+    filter(nchar(words) > 4 &
+           str_detect(words, b_letters[7]) &
+           str_detect(words, pattern))
   
-  output$total <- renderText({paste0("There Are ", nrow(total_words),
-                                     " Total Words In Today's Puzzle, and There Are ",
-                                     total_points, " Total Points") 
+  total_words <- nrow(total_fours) + nrow(total_others)
+  
+  
+  total_points <- sum(str_length(total_others$words)) + nrow(total_fours)
+  
+  output$total <- renderText({paste0("There are ", total_words,
+                                     " total words in today's puzzle. There are ",
+                                     total_points, " total points") 
   })
   
   output$letter <- renderText({
@@ -103,11 +101,31 @@ server <- function(input, output, session) {
   values$df <- data.frame(Guesses = numeric(0))
   
   correct <- eventReactive(input$submit, {
-    ifelse(str_detect(tolower(input$guess), b_letters[7]) == "TRUE" & 
-             all(str_split_1(tolower(input$guess), "") %in% b_letters) == "TRUE" &
-             any(all_four$words == tolower(input$guess)) == "TRUE" &
-             any(values$df$Guesses == tolower(input$guess)) == "FALSE",
-           str_length(input$guess), 0)
+    if(str_detect(tolower(input$guess), b_letters[7]) == TRUE & 
+       all(str_split_1(tolower(input$guess), "") %in% b_letters) == TRUE &
+       any(all_four$words == tolower(input$guess)) == TRUE &
+       any(values$df$Guesses == tolower(input$guess)) == FALSE &
+       str_length(input$guess) == 4){
+      1
+    }else{
+      if(str_detect(tolower(input$guess), b_letters[7]) == TRUE & 
+         all(str_split_1(tolower(input$guess), "") %in% b_letters) == TRUE &
+         any(all_four$words == tolower(input$guess)) == TRUE &
+         any(values$df$Guesses == tolower(input$guess)) == FALSE &
+         str_length(input$guess) > 4){
+      str_length(input$guess)
+      }else{
+        if(str_detect(tolower(input$guess), b_letters[7]) == TRUE & 
+           all(str_split_1(tolower(input$guess), "") %in% b_letters) == TRUE &
+           any(all_four$words == tolower(input$guess)) == TRUE &
+           any(values$df$Guesses == tolower(input$guess)) == FALSE &
+           all(b_letters %in% str_split_1(input$guess, "")) == TRUE){
+          str_length(input$guess)*2
+        }else{
+          0
+        }
+      }
+    }
   })
   
   newEntry <- observe({
@@ -133,11 +151,19 @@ server <- function(input, output, session) {
     if(str_length(button()) < 4){
       "Too Short"
     }else{
-      if(correct() >= 4){
+      if(correct() == 1){
+        paste0("Congrats! You Earned 1 Point!")
+      }else{
+        if(correct() > 4){
         paste0("Congrats! You Earned ", str_length(button()), " Points!")
         }else{
-          "Sorry Charlie"
+          if(correct() > 0 & all(b_letters %in% str_split_1(input$guess, "")) == TRUE){
+          "PANGRAM!!!!"
+          }else{
+        "Sorry Charlie"
+        }
       }
+     }
     }
   })
   
@@ -146,30 +172,30 @@ server <- function(input, output, session) {
       "Good Start!"
     }else{
       if(sum(score$db) > total_points/6 & sum(score$db) < total_points*.333){
-      "Going Strong!"
+        "Going Strong!"
       }else{
         if(sum(score$db) > total_points*.333 & sum(score$db) < total_points*.5){
-        "GREAT!"
+          "GREAT!"
         }else{
           if(sum(score$db) > total_points*.5 & sum(score$db) < total_points*.667){
-          "EXCELLENT!!" 
+            "EXCELLENT!!" 
           }else{
             if(sum(score$db) > total_points*.667 & sum(score$db) < total_points*.833){
-            "INCREDIBLE!!!" 
+              "INCREDIBLE!!!" 
             }else{
               if(sum(score$db) > total_points*.833 & sum(score$db) < total_points*.999){
-              "GENIUS!!! Congratulations You Have Won!"
+                "GENIUS!!! Congratulations You Have Won!"
               }else{
                 if(sum(score$db) == total_points){
-                "HOLY SHIT A QUEEN BEE?!?!?! I CAN'T FUCKING BELIEVE IT!"
+                  "HOLY $#@& A QUEEN BEE?!?!?! I CAN'T BELIEVE IT! THE GAME IS NOT WORTHY!!"
                 }else{
-                "Good Luck!"
+                  "Good Luck!"
+                }
               }
             }
           }
         }
       }
-    }
     }
   })
   
@@ -199,4 +225,5 @@ server <- function(input, output, session) {
 }
 
 shinyApp(ui, server)
+
 
