@@ -2,7 +2,12 @@ library(tidyverse)
 library(stringr)
 library(stringi)
 library(shiny)
-library(shinycssloaders)
+
+
+library(tidyverse)
+library(stringr)
+library(stringi)
+library(shiny)
 
 ui <- fluidPage(
   
@@ -23,18 +28,28 @@ ui <- fluidPage(
     ),
     mainPanel(
       
-      withSpinner(
-        textOutput("total")
-      ),
+      textOutput("total"),
       
       textOutput("score"),
       
       plotOutput("plot", height = "100px"),
       
-      tags$b(textOutput("rank")),
+      tags$b(textOutput("rank"))
+      
     ),
   ),
-  tableOutput("guesses")
+  column(width = 3,
+         tableOutput("guesses")
+  ),
+  
+  column(width = 3,
+         actionButton("cheat", "SHOW ANSWERS")
+  ),
+  
+  column(width = 6,
+         tableOutput("allwords")
+  )
+  
 )
 
 
@@ -54,10 +69,6 @@ server <- function(input, output, session) {
   
   b_letters <- c(sample(bee_letters, 4, replace = FALSE), sample(bee_vowels, 3, replace = FALSE))
   
-  output$choose <- renderText({
-    "Here are the game letters:"
-  })
-  
   output$bee <- renderText(
     b_letters
   )
@@ -66,20 +77,23 @@ server <- function(input, output, session) {
   
   total_fours <- all_four |>
     filter(nchar(words) == 4 &
-           str_detect(words, b_letters[7]) &
-           str_detect(words, pattern))
+             str_detect(words, b_letters[7]) &
+             str_detect(words, pattern))
   
   total_others <- all_four |>
     filter(nchar(words) > 4 &
-           str_detect(words, b_letters[7]) &
-           str_detect(words, pattern))
+             str_detect(words, b_letters[7]) &
+             str_detect(words, pattern))
   
-  total_words <- nrow(total_fours) + nrow(total_others)
+  total_words <- all_four |>
+    filter(nchar(words) > 3 &
+             str_detect(words, b_letters[7]) &
+             str_detect(words, pattern))
   
   
   total_points <- sum(str_length(total_others$words)) + nrow(total_fours)
   
-  output$total <- renderText({paste0("There are ", total_words,
+  output$total <- renderText({paste0("There are ", nrow(total_words),
                                      " total words in today's puzzle. There are ",
                                      total_points, " total points") 
   })
@@ -101,26 +115,26 @@ server <- function(input, output, session) {
   values$df <- data.frame(Guesses = numeric(0))
   
   correct <- eventReactive(input$submit, {
-    if(str_detect(tolower(input$guess), b_letters[7]) == TRUE & 
-       all(str_split_1(tolower(input$guess), "") %in% b_letters) == TRUE &
-       any(all_four$words == tolower(input$guess)) == TRUE &
-       any(values$df$Guesses == tolower(input$guess)) == FALSE &
-       str_length(input$guess) == 4){
+    if(str_detect(button(), b_letters[7]) == TRUE & 
+       all(str_split_1(button(), "") %in% b_letters) == TRUE &
+       any(all_four$words == button()) == TRUE &
+       any(values$df$Guesses == button()) == FALSE &
+       str_length(button()) == 4){
       1
     }else{
-      if(str_detect(tolower(input$guess), b_letters[7]) == TRUE & 
-         all(str_split_1(tolower(input$guess), "") %in% b_letters) == TRUE &
-         any(all_four$words == tolower(input$guess)) == TRUE &
-         any(values$df$Guesses == tolower(input$guess)) == FALSE &
-         str_length(input$guess) > 4){
-      str_length(input$guess)
+      if(str_detect(button(), b_letters[7]) == TRUE & 
+         all(str_split_1(button(), "") %in% b_letters) == TRUE &
+         any(all_four$words == button()) == TRUE &
+         any(values$df$Guesses == button()) == FALSE &
+         str_length(button()) > 4){
+        str_length(button())
       }else{
-        if(str_detect(tolower(input$guess), b_letters[7]) == TRUE & 
-           all(str_split_1(tolower(input$guess), "") %in% b_letters) == TRUE &
-           any(all_four$words == tolower(input$guess)) == TRUE &
-           any(values$df$Guesses == tolower(input$guess)) == FALSE &
-           all(b_letters %in% str_split_1(input$guess, "")) == TRUE){
-          str_length(input$guess)*2
+        if(str_detect(button(), b_letters[7]) == TRUE & 
+           all(str_split_1(button(), "") %in% b_letters) == TRUE &
+           any(all_four$words == button()) == TRUE &
+           any(values$df$Guesses == button()) == FALSE &
+           all(b_letters %in% str_split_1(button(), "")) == TRUE){
+          str_length(button())*2
         }else{
           0
         }
@@ -155,15 +169,15 @@ server <- function(input, output, session) {
         paste0("Congrats! You Earned 1 Point!")
       }else{
         if(correct() > 4){
-        paste0("Congrats! You Earned ", str_length(button()), " Points!")
+          paste0("Congrats! You Earned ", str_length(button()), " Points!")
         }else{
           if(correct() > 0 & all(b_letters %in% str_split_1(input$guess, "")) == TRUE){
-          "PANGRAM!!!!"
+            "PANGRAM!!!!"
           }else{
-        "Sorry Charlie"
+            "Sorry Charlie"
+          }
         }
       }
-     }
     }
   })
   
@@ -222,8 +236,10 @@ server <- function(input, output, session) {
             axis.ticks.x = element_blank()) + 
       theme_classic()
   )
+  
+  observeEvent(input$cheat, {
+    output$allwords <-  renderTable(total_words)
+  })
 }
 
 shinyApp(ui, server)
-
-
